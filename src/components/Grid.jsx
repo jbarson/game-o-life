@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 function Grid() {
   const squareGrid = {
     rows: 50,
@@ -22,6 +22,8 @@ function Grid() {
   // const totalCells = squareGrid.cols* squareGrid.rows
   const [running, setRunning] = useState(false)
   const [grid, setGrid] = useState(initialGrid())
+  const [intervalId, setIntervalId] = useState(null)
+  const [generation, setgeneration] = useState(0)
   const findCell = (array, cellRow, cellCol) => {
     return array.findIndex((item) => item.row === cellRow && item.col === cellCol)
   }
@@ -33,54 +35,50 @@ function Grid() {
     setGrid(newGrid)
   }
 
-  // const runningRef = useRef(running)
-  // runningRef.current = running
-
   const toggleGame = () => {
-    running ? setRunning(false) : setRunning(true)
-    setInterval(iterate, 1000)
+    if (running) {
+      setRunning(false)
+    } else {
+      setRunning(true)
+      iterate()
+    }
   }
-  const findNeighbours = (row, col) => {
-    let numNeighbours = 0
-    const neighbours = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]
-    neighbours.forEach(cell => {
-      const cellId = grid[findCell(grid, row + cell[0], col + cell[1])]
-      if (cellId?.active) numNeighbours++
-    })
-    return numNeighbours
-  }
-  const iterate = () => {
+
+  const iterate = useCallback(() => {
+    if (!running) return
+    const findNeighbours = (row, col) => {
+      let numNeighbours = 0
+      const neighbours = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]
+      neighbours.forEach(cell => {
+        const cellId = grid[findCell(grid, row + cell[0], col + cell[1])]
+        if (cellId?.active) numNeighbours++
+      })
+      return numNeighbours
+    }
+
     const newGrid = grid.map(cell => {
-      const neighbours = findNeighbours(cell.row, cell.col)
-      const isActive = cell.active ? neighbours > 1 && neighbours < 4 : neighbours === 3
+      const numNeighbours = findNeighbours(cell.row, cell.col)
+      const isActive = cell.active ? numNeighbours === 2 || numNeighbours === 3 : numNeighbours === 3
       return { row: cell.row, col: cell.col, active: isActive }
     })
+    console.log('new', newGrid.filter(item => item.active))
     setGrid(newGrid)
-  }
+    // console.log('second',grid.filter(item => item.active))
+    // console.timeEnd('one')
+  }, [grid, running])
 
-  // useEffect(() => {
-  //   if(!runningRef) return
-  //   const findNeighbours = (row, col) => {
-  //     let numNeighbours = 0
-  //     const neighbours = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]
-  //     neighbours.forEach(cell => {
-  //       const cellId = grid[findCell(grid, row + cell[0], col + cell[1])]
-  //       if (cellId?.active) numNeighbours++
-  //     })
-  //     return numNeighbours
-  //   }
-  //     const newGrid = grid.map(cell => {
-  //       const neighbours = findNeighbours(cell.row, cell.col)
-  //       const isActive = cell.active ? neighbours > 1 && neighbours < 4 : neighbours === 3
-  //       return { row: cell.row, col: cell.col, active: isActive }
-  //     })
-  //     setGrid(newGrid)
-  //   }, [runningRef, grid])
+  useEffect(() => {
+    const intervalID = setInterval(() => {
+      iterate()
+    }, 0);
+    return () => {
+      clearInterval(intervalID)
+    }
+  }, [grid, iterate])
 
   return (
     <>
-      {/* <button onClick={iterate()}>start</button> */}
-      <button onClick={() => toggleGame()}>{running ? "running" : "start"}</button>
+      <button onClick={() => toggleGame()}>{running ? "running" : "start"}</button>{generation}
       <div className="grid">
         {grid.map((cell, index) => <Square key={index} col={cell.col} row={cell.row} active={cell.active} setActive={toggleCellState} />)}
       </div>
@@ -89,10 +87,20 @@ function Grid() {
 }
 export default Grid
 
-
-
 function Square({ row, col, active, setActive }) {
   return (
     <div className={active ? 'square active' : 'square'} onClick={() => setActive(row, col)}></div>
   )
 }
+
+// function Square({ row, col, active, setActive }) {
+//   const memodSquare = useMemo(() => {
+//     return (
+//       <div className={active ? 'square active' : 'square'} onClick={() => setActive(row, col)}></div>
+//     )
+//   }, [row, col, active, setActive])
+//   return memodSquare
+// }
+
+//try use memo or use callback
+// immutable state
