@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react"
+import produce from 'immer'
 function Grid() {
   const squareGrid = {
     rows: 50,
@@ -19,11 +20,11 @@ function Grid() {
       })
     return result
   }
-  // const totalCells = squareGrid.cols* squareGrid.rows
+
   const [running, setRunning] = useState(false)
   const [grid, setGrid] = useState(initialGrid())
-  const [intervalId, setIntervalId] = useState(null)
   const [generation, setgeneration] = useState(0)
+
   const findCell = (array, cellRow, cellCol) => {
     return array.findIndex((item) => item.row === cellRow && item.col === cellCol)
   }
@@ -44,6 +45,12 @@ function Grid() {
     }
   }
 
+  const randomize = () => {
+    setGrid(produce(draft =>
+      draft.forEach(item => item.active = Math.random() > 0.5)
+      ))
+  }
+
   const iterate = useCallback(() => {
     if (!running) return
     const findNeighbours = (row, col) => {
@@ -61,11 +68,9 @@ function Grid() {
       const isActive = cell.active ? numNeighbours === 2 || numNeighbours === 3 : numNeighbours === 3
       return { row: cell.row, col: cell.col, active: isActive }
     })
-    console.log('new', newGrid.filter(item => item.active))
+    setgeneration(generation + 1)
     setGrid(newGrid)
-    // console.log('second',grid.filter(item => item.active))
-    // console.timeEnd('one')
-  }, [grid, running])
+  }, [grid, running, generation])
 
   useEffect(() => {
     const intervalID = setInterval(() => {
@@ -79,6 +84,7 @@ function Grid() {
   return (
     <>
       <button onClick={() => toggleGame()}>{running ? "running" : "start"}</button>{generation}
+      <button onClick={() => randomize()}>Random</button>
       <div className="grid">
         {grid.map((cell, index) => <Square key={index} col={cell.col} row={cell.row} active={cell.active} setActive={toggleCellState} />)}
       </div>
