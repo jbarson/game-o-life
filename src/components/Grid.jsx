@@ -30,10 +30,14 @@ function Grid() {
   }
 
   const toggleCellState = (row, col) => {
-    const newGrid = [...grid]
-    const cell = findCell(newGrid, row, col)
-    newGrid.splice(cell, 1, { row: newGrid[cell].row, col: newGrid[cell].col, active: !newGrid[cell].active })
-    setGrid(newGrid)
+    setGrid(produce(draft=>{
+      const cell = findCell(draft, row, col)
+      cell.active = !cell.active
+    }))
+    // const newGrid = [...grid]
+    // const cell = findCell(newGrid, row, col)
+    // newGrid.splice(cell, 1, { row: newGrid[cell].row, col: newGrid[cell].col, active: !newGrid[cell].active })
+    // setGrid(newGrid)
   }
 
   const toggleGame = () => {
@@ -63,13 +67,21 @@ function Grid() {
       return numNeighbours
     }
 
-    const newGrid = grid.map(cell => {
-      const numNeighbours = findNeighbours(cell.row, cell.col)
-      const isActive = cell.active ? numNeighbours === 2 || numNeighbours === 3 : numNeighbours === 3
-      return { row: cell.row, col: cell.col, active: isActive }
+    console.time('iterate')
+    const newGrid = produce(draft => {
+      draft.forEach(item => {
+        const numNeighbours = findNeighbours(item.row, item.col)
+        item.active = item.active ? numNeighbours === 2 || numNeighbours === 3 : numNeighbours === 3
+      })
     })
-    setgeneration(generation + 1)
+    // const newGrid = grid.map(cell => {
+    //   const numNeighbours = findNeighbours(cell.row, cell.col)
+    //   const isActive = cell.active ? numNeighbours === 2 || numNeighbours === 3 : numNeighbours === 3
+    //   return { row: cell.row, col: cell.col, active: isActive }
+    // })
+    console.timeEnd('iterate')
     setGrid(newGrid)
+    setgeneration(generation + 1)
   }, [grid, running, generation])
 
   useEffect(() => {
@@ -86,16 +98,16 @@ function Grid() {
       <button onClick={() => toggleGame()}>{running ? "running" : "start"}</button>{generation}
       <button onClick={() => randomize()}>Random</button>
       <div className="grid">
-        {grid.map((cell, index) => <Square key={index} col={cell.col} row={cell.row} active={cell.active} setActive={toggleCellState} />)}
+        {grid.map((cell, index) => <Square key={index} col={cell.col} row={cell.row} active={cell.active} cell={cell} setActive={toggleCellState} />)}
       </div>
     </>
   )
 }
 export default Grid
 
-function Square({ row, col, active, setActive }) {
+function Square({cell, setActive }) {
   return (
-    <div className={active ? 'square active' : 'square'} onClick={() => setActive(row, col)}></div>
+    <div className={cell.active ? 'square active' : 'square'} onClick={() => setActive(cell.row, cell.col)}></div>
   )
 }
 
