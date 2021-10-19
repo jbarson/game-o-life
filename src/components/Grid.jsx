@@ -29,15 +29,11 @@ function Grid() {
     return array.findIndex((item) => item.row === cellRow && item.col === cellCol)
   }
 
-  const toggleCellState = (row, col) => {
+  const toggleCellState = (item) => {
     setGrid(produce(draft=>{
-      const cell = findCell(draft, row, col)
+      const cell = draft.find(square => square.row === item.row && square.col === item.col)
       cell.active = !cell.active
     }))
-    // const newGrid = [...grid]
-    // const cell = findCell(newGrid, row, col)
-    // newGrid.splice(cell, 1, { row: newGrid[cell].row, col: newGrid[cell].col, active: !newGrid[cell].active })
-    // setGrid(newGrid)
   }
 
   const toggleGame = () => {
@@ -67,7 +63,7 @@ function Grid() {
       return numNeighbours
     }
 
-    console.time('iterate')
+
     const newGrid = produce(draft => {
       draft.forEach(item => {
         const numNeighbours = findNeighbours(item.row, item.col)
@@ -79,8 +75,9 @@ function Grid() {
     //   const isActive = cell.active ? numNeighbours === 2 || numNeighbours === 3 : numNeighbours === 3
     //   return { row: cell.row, col: cell.col, active: isActive }
     // })
-    console.timeEnd('iterate')
+    console.time('iterate')
     setGrid(newGrid)
+    console.timeEnd('iterate')
     setgeneration(generation + 1)
   }, [grid, running, generation])
 
@@ -107,7 +104,7 @@ export default Grid
 
 function Square({cell, setActive }) {
   return (
-    <div className={cell.active ? 'square active' : 'square'} onClick={() => setActive(cell.row, cell.col)}></div>
+    <div className={cell.active ? 'square active' : 'square'} onClick={() => setActive(cell)}></div>
   )
 }
 
