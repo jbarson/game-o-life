@@ -1,25 +1,20 @@
 import { useState, useCallback, useEffect } from "react"
-import produce from 'immer'
 import Square from './Square'
 
 const SIMULATION_INTERVAL = 100 // milliseconds between generations
+const NEIGHBOR_OFFSETS = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]
 
 const findNeighbours = (grid, row, col) => {
   let numNeighbours = 0
-  const neighbours = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]
-  neighbours.forEach(([dx, dy]) => {
-    const newRow = row + dx
-    const newCol = col + dy
-    if (
-      newRow >= 0 &&
-      newRow < grid.length &&
-      newCol >= 0 &&
-      newCol < grid[0].length &&
-      grid[newRow][newCol]
-    ) {
-      numNeighbours++
-    }
-  })
+  const rows = grid.length
+  const cols = grid[0].length
+  for (let i = 0; i < NEIGHBOR_OFFSETS.length; i++) {
+    const dx = NEIGHBOR_OFFSETS[i][0]
+    const dy = NEIGHBOR_OFFSETS[i][1]
+    const r = row + dx
+    const c = col + dy
+    if (r >= 0 && r < rows && c >= 0 && c < cols && grid[r][c]) numNeighbours++
+  }
   return numNeighbours
 }
 
@@ -41,9 +36,11 @@ function Grid() {
   const [generation, setgeneration] = useState(0)
 
   const toggleCellState = useCallback((cell) => {
-    setGrid(produce(draft => {
-      draft[cell.row][cell.col] = !draft[cell.row][cell.col]
-    }))
+    setGrid(prev => {
+      const next = prev.map(row => row.slice())
+      next[cell.row][cell.col] = !next[cell.row][cell.col]
+      return next
+    })
   }, [])
 
   const toggleGame = () => {
@@ -55,22 +52,26 @@ function Grid() {
   }
 
   const randomize = () => {
-    setGrid(produce(draft =>
-      draft.forEach(row => row.forEach((_, colIndex) => row[colIndex] = Math.random() > 0.5))
-    ))
+    setGrid(() =>
+      Array.from({ length: squareGrid.rows }, () =>
+        Array.from({ length: squareGrid.cols }, () => Math.random() > 0.5)
+      )
+    )
   }
 
   const iterate = useCallback(() => {
-    setGrid(g => produce(g, draft => {
-      draft.forEach((row, rowIndex) => {
-        row.forEach((cell, colIndex) => {
-          const numNeighbours = findNeighbours(g, rowIndex, colIndex)
-          draft[rowIndex][colIndex] = g[rowIndex][colIndex]
-            ? numNeighbours === 2 || numNeighbours === 3
-            : numNeighbours === 3
-        })
-      })
-    }))
+    setGrid(prev => {
+      const rows = prev.length
+      const cols = prev[0].length
+      const next = Array.from({ length: rows }, () => Array(cols))
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const n = findNeighbours(prev, r, c)
+          next[r][c] = prev[r][c] ? (n === 2 || n === 3) : (n === 3)
+        }
+      }
+      return next
+    })
     setgeneration(g => g + 1)
   }, [])
 
