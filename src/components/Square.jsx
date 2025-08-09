@@ -4,6 +4,9 @@ import PropTypes from 'prop-types'
 const Square = memo(({ row, col, active, setActive }) => {
   return (
     <div
+      role="gridcell"
+      aria-selected={active}
+      data-testid="square"
       className={active ? "square active" : "square"}
       onClick={() => setActive({ row, col })}
     />
