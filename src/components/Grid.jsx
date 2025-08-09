@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react"
+import { useState, useCallback, useEffect, useMemo, useRef } from "react"
 import Square from './Square'
 
 const SIMULATION_INTERVAL = 100 // milliseconds between generations
@@ -59,27 +59,65 @@ function Grid() {
     )
   }
 
+  const workerRef = useRef(null)
+
+  // Initialize worker lazily
+  const getWorker = () => {
+    if (workerRef.current) return workerRef.current
+    try {
+      // Use public folder worker to avoid bundler/test complications
+      const url = `${process.env.PUBLIC_URL || ''}/lifeWorker.js`
+      const w = new Worker(url)
+      workerRef.current = w
+      return w
+    } catch (_e) {
+      return null
+    }
+  }
+
   const iterate = useCallback(() => {
-    setGrid(prev => {
-      const rows = prev.length
-      const cols = prev[0].length
-      const next = Array.from({ length: rows }, () => Array(cols))
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const n = findNeighbours(prev, r, c)
-          next[r][c] = prev[r][c] ? (n === 2 || n === 3) : (n === 3)
-        }
+    const worker = getWorker()
+    if (worker) {
+      const handleMessage = (e) => {
+        setGrid(e.data)
+        setgeneration(g => g + 1)
+        worker.removeEventListener('message', handleMessage)
       }
-      return next
-    })
-    setgeneration(g => g + 1)
-  }, [])
+      worker.addEventListener('message', handleMessage)
+      worker.postMessage(grid)
+    } else {
+      // Fallback synchronous compute
+      setGrid(prev => {
+        const rows = prev.length
+        const cols = prev[0].length
+        const next = Array.from({ length: rows }, () => Array(cols))
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const n = findNeighbours(prev, r, c)
+            next[r][c] = prev[r][c] ? (n === 2 || n === 3) : (n === 3)
+          }
+        }
+        return next
+      })
+      setgeneration(g => g + 1)
+    }
+  }, [grid])
 
   useEffect(() => {
     if (!running) return
     const intervalID = setInterval(iterate, SIMULATION_INTERVAL) // Adjust interval for better control
     return () => clearInterval(intervalID)
   }, [running, iterate])
+
+  // Cleanup worker on unmount
+  useEffect(() => {
+    return () => {
+      if (workerRef.current) {
+        workerRef.current.terminate()
+        workerRef.current = null
+      }
+    }
+  }, [])
 
   const squares = useMemo(() => (
     grid.map((row, rowIndex) =>
