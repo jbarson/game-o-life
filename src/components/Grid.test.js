@@ -8,10 +8,14 @@ test('renders the grid', () => {
 })
 
 test('toggles cell state on click', () => {
-  const { container } = render(<Grid />)
-  const square = container.getElementsByClassName('square')[0]
-  fireEvent.click(square)
-  expect(square).toHaveClass('active')
+  render(<Grid />)
+  const gridElement = screen.getByRole('grid')
+  const squares = gridElement.querySelectorAll('.square')
+  const firstSquare = squares[0]
+
+  expect(firstSquare).not.toHaveClass('active')
+  fireEvent.click(firstSquare)
+  expect(firstSquare).toHaveClass('active')
 })
 
 test('starts and stops the simulation', () => {
@@ -24,10 +28,16 @@ test('starts and stops the simulation', () => {
 })
 
 test('randomizes the grid', () => {
-  const { container } = render(<Grid />)
+  render(<Grid />)
+  const gridElement = screen.getByRole('grid')
   const randomizeButton = screen.getByText(/random/i)
+
   fireEvent.click(randomizeButton)
-  // Hard to test the exact state, but we can check if there are active cells
-  const activeSquares = Array.from(container.getElementsByClassName('square')).filter(el => el.classList.contains('active'))
-  expect(activeSquares.length).toBeGreaterThan(0)
+
+  // After randomization, there should be some active squares (with high probability)
+  const squaresAfter = gridElement.querySelectorAll('.square.active').length
+
+  // Since randomization has 50% chance per cell, with 2500 cells, 
+  // it's extremely unlikely to have 0 active cells
+  expect(squaresAfter).toBeGreaterThan(0)
 })
