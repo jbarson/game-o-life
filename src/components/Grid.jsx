@@ -1,6 +1,8 @@
-import { useState, useCallback, useEffect, memo } from "react"
+import { useState, useCallback, useEffect } from "react"
 import produce from 'immer'
 import Square from './Square'
+
+const SIMULATION_INTERVAL = 100 // milliseconds between generations
 
 const findNeighbours = (grid, row, col) => {
   let numNeighbours = 0
@@ -81,6 +83,7 @@ function Grid() {
   return (
     <>
       <button onClick={toggleGame}>{running ? "Pause" : "Start"}</button>
+      <span>Generation: {generation}</span>
       <button onClick={randomize}>Random</button>
       <div className="grid" role="grid">
         {grid.map((row, rowIndex) =>
