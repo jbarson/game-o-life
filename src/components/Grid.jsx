@@ -82,7 +82,7 @@ function Grid() {
     <>
       <button onClick={toggleGame}>{running ? "Pause" : "Start"}</button>
       <button onClick={randomize}>Random</button>
-      <div className="grid">
+      <div className="grid" role="grid">
         {grid.map((row, rowIndex) =>
           row.map((active, colIndex) => (
             <Square
