@@ -9,7 +9,8 @@ test('renders the grid', () => {
 
 test('toggles cell state on click', () => {
   render(<Grid />);
-  const square = screen.getAllByRole('cell')[0];
+  const { container } = render(<Grid />);
+  const square = container.getElementsByClassName('square')[0];
   fireEvent.click(square);
   expect(square).toHaveClass('active');
 });
