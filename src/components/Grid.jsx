@@ -74,7 +74,7 @@ function Grid() {
 
   useEffect(() => {
     if (!running) return
-    const intervalID = setInterval(iterate, 100) // Adjust interval for better control
+    const intervalID = setInterval(iterate, SIMULATION_INTERVAL) // Adjust interval for better control
     return () => clearInterval(intervalID)
   }, [running, iterate])
 
