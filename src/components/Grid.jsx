@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useMemo } from "react"
 import Square from './Square'
 
 const SIMULATION_INTERVAL = 100 // milliseconds between generations
@@ -32,7 +32,7 @@ function Grid() {
   }
 
   const [running, setRunning] = useState(false)
-  const [grid, setGrid] = useState(initialGrid())
+  const [grid, setGrid] = useState(initialGrid)
   const [generation, setgeneration] = useState(0)
 
   const toggleCellState = useCallback((cell) => {
@@ -81,23 +81,27 @@ function Grid() {
     return () => clearInterval(intervalID)
   }, [running, iterate])
 
+  const squares = useMemo(() => (
+    grid.map((row, rowIndex) =>
+      row.map((active, colIndex) => (
+        <Square
+          key={`${rowIndex}-${colIndex}`}
+          row={rowIndex}
+          col={colIndex}
+          active={active}
+          setActive={toggleCellState}
+        />
+      ))
+    )
+  ), [grid, toggleCellState])
+
   return (
     <>
       <button onClick={toggleGame}>{running ? "Pause" : "Start"}</button>
       <span>Generation: {generation}</span>
       <button onClick={randomize}>Random</button>
       <div className="grid" role="grid">
-        {grid.map((row, rowIndex) =>
-          row.map((active, colIndex) => (
-            <Square
-              key={`${rowIndex}-${colIndex}`}
-              row={rowIndex}
-              col={colIndex}
-              active={active}
-              setActive={toggleCellState}
-            />
-          ))
-        )}
+        {squares}
       </div>
     </>
   )
