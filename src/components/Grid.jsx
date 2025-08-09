@@ -60,6 +60,31 @@ function Grid() {
   }
 
   const workerRef = useRef(null)
+  const runningRef = useRef(false)
+  const gridRef = useRef(grid)
+  const inFlightRef = useRef(false)
+  const timerRef = useRef(null)
+
+  // Keep refs in sync with state
+  useEffect(() => { gridRef.current = grid }, [grid])
+  useEffect(() => { runningRef.current = running }, [running])
+
+  // Schedules the next step after a fixed delay
+  function scheduleNext() {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      if (!runningRef.current) return
+      step()
+    }, SIMULATION_INTERVAL)
+  }
+
+  // Worker message handler (set once)
+  function handleWorkerMessage(e) {
+    setGrid(e.data)
+    setgeneration(g => g + 1)
+    inFlightRef.current = false
+    if (runningRef.current) scheduleNext()
+  }
 
   // Initialize worker lazily
   const getWorker = () => {
@@ -68,6 +93,7 @@ function Grid() {
       // Use public folder worker to avoid bundler/test complications
       const url = `${process.env.PUBLIC_URL || ''}/lifeWorker.js`
       const w = new Worker(url)
+      w.onmessage = handleWorkerMessage
       workerRef.current = w
       return w
     } catch (_e) {
@@ -75,43 +101,55 @@ function Grid() {
     }
   }
 
-  const iterate = useCallback(() => {
+  // One simulation step, either via worker or synchronously
+  function step() {
+    if (inFlightRef.current) return
     const worker = getWorker()
     if (worker) {
-      const handleMessage = (e) => {
-        setGrid(e.data)
-        setgeneration(g => g + 1)
-        worker.removeEventListener('message', handleMessage)
-      }
-      worker.addEventListener('message', handleMessage)
-      worker.postMessage(grid)
-    } else {
-      // Fallback synchronous compute
-      setGrid(prev => {
-        const rows = prev.length
-        const cols = prev[0].length
-        const next = Array.from({ length: rows }, () => Array(cols))
-        for (let r = 0; r < rows; r++) {
-          for (let c = 0; c < cols; c++) {
-            const n = findNeighbours(prev, r, c)
-            next[r][c] = prev[r][c] ? (n === 2 || n === 3) : (n === 3)
-          }
-        }
-        return next
-      })
-      setgeneration(g => g + 1)
+      inFlightRef.current = true
+      worker.postMessage(gridRef.current)
+      return
     }
-  }, [grid])
+    // Fallback synchronous compute
+    const prev = gridRef.current
+    const rows = prev.length
+    const cols = prev[0].length
+    const next = Array.from({ length: rows }, () => Array(cols))
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const n = findNeighbours(prev, r, c)
+        next[r][c] = prev[r][c] ? (n === 2 || n === 3) : (n === 3)
+      }
+    }
+    setGrid(next)
+    setgeneration(g => g + 1)
+    if (runningRef.current) scheduleNext()
+  }
 
+  // Start/stop loop when running changes
   useEffect(() => {
-    if (!running) return
-    const intervalID = setInterval(iterate, SIMULATION_INTERVAL) // Adjust interval for better control
-    return () => clearInterval(intervalID)
-  }, [running, iterate])
+    if (running) {
+      // ensure worker has handler if available
+      const w = getWorker()
+      if (w) w.onmessage = handleWorkerMessage
+      // kick off immediately
+      step()
+    } else {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running])
 
   // Cleanup worker on unmount
   useEffect(() => {
     return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
       if (workerRef.current) {
         workerRef.current.terminate()
         workerRef.current = null
