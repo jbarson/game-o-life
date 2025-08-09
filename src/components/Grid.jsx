@@ -1,5 +1,8 @@
 import { useState, useCallback, useEffect } from "react"
 import produce from 'immer'
+
+const SIMULATION_INTERVAL = 100 // milliseconds between generations
+
 function Grid() {
   const squareGrid = {
     rows: 50,
@@ -30,7 +33,7 @@ function Grid() {
   }
 
   const toggleCellState = (item) => {
-    setGrid(produce(draft=>{
+    setGrid(produce(draft => {
       const cell = draft.find(square => square.row === item.row && square.col === item.col)
       cell.active = !cell.active
     }))
@@ -48,7 +51,7 @@ function Grid() {
   const randomize = () => {
     setGrid(produce(draft =>
       draft.forEach(item => item.active = Math.random() > 0.5)
-      ))
+    ))
   }
 
   const iterate = useCallback(() => {
@@ -63,18 +66,13 @@ function Grid() {
       return numNeighbours
     }
 
-
     const newGrid = produce(draft => {
       draft.forEach(item => {
         const numNeighbours = findNeighbours(item.row, item.col)
         item.active = item.active ? numNeighbours === 2 || numNeighbours === 3 : numNeighbours === 3
       })
     })
-    // const newGrid = grid.map(cell => {
-    //   const numNeighbours = findNeighbours(cell.row, cell.col)
-    //   const isActive = cell.active ? numNeighbours === 2 || numNeighbours === 3 : numNeighbours === 3
-    //   return { row: cell.row, col: cell.col, active: isActive }
-    // })
+
     console.time('iterate')
     setGrid(newGrid)
     console.timeEnd('iterate')
@@ -84,7 +82,7 @@ function Grid() {
   useEffect(() => {
     const intervalID = setInterval(() => {
       iterate()
-    }, 0)
+    }, SIMULATION_INTERVAL)
     return () => {
       clearInterval(intervalID)
     }
@@ -102,20 +100,8 @@ function Grid() {
 }
 export default Grid
 
-function Square({cell, setActive }) {
+function Square({ cell, setActive }) {
   return (
     <div className={cell.active ? 'square active' : 'square'} onClick={() => setActive(cell)}></div>
   )
 }
-
-// function Square({ row, col, active, setActive }) {
-//   const memodSquare = useMemo(() => {
-//     return (
-//       <div className={active ? 'square active' : 'square'} onClick={() => setActive(row, col)}></div>
-//     )
-//   }, [row, col, active, setActive])
-//   return memodSquare
-// }
-
-//try use memo or use callback
-// immutable state
