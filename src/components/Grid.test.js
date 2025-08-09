@@ -8,7 +8,6 @@ test('renders the grid', () => {
 });
 
 test('toggles cell state on click', () => {
-  render(<Grid />);
   const { container } = render(<Grid />);
   const square = container.getElementsByClassName('square')[0];
   fireEvent.click(square);
