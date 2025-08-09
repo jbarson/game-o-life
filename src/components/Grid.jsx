@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect } from "react"
 import produce from 'immer'
 function Grid() {
   const squareGrid = {
@@ -84,7 +84,7 @@ function Grid() {
   useEffect(() => {
     const intervalID = setInterval(() => {
       iterate()
-    }, 0);
+    }, 0)
     return () => {
       clearInterval(intervalID)
     }
