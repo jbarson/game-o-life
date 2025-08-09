@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react"
-import Square from './Square'
 
 const SIMULATION_INTERVAL = 100 // milliseconds between generations
+const CELL_SIZE = 10 // canvas pixels per cell (match CSS .square)
+const CELL_GAP = 1 // pixels between cells (match CSS .grid gap)
 const NEIGHBOR_OFFSETS = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]
 
 const findNeighbours = (grid, row, col) => {
@@ -63,31 +64,24 @@ function Grid() {
   const runningRef = useRef(false)
   const gridRef = useRef(grid)
   const inFlightRef = useRef(false)
-  const timerRef = useRef(null)
+  const canvasRef = useRef(null)
+  const rafRef = useRef(null)
+  const lastTimeRef = useRef(0)
+  const accRef = useRef(0)
 
   // Keep refs in sync with state
   useEffect(() => { gridRef.current = grid }, [grid])
   useEffect(() => { runningRef.current = running }, [running])
 
-  // Schedules the next step after a fixed delay
-  function scheduleNext() {
-    if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => {
-      if (!runningRef.current) return
-      step()
-    }, SIMULATION_INTERVAL)
-  }
-
-  // Worker message handler (set once)
-  function handleWorkerMessage(e) {
+  // Worker message handler (stable)
+  const handleWorkerMessage = useCallback((e) => {
     setGrid(e.data)
     setgeneration(g => g + 1)
     inFlightRef.current = false
-    if (runningRef.current) scheduleNext()
-  }
+  }, [])
 
-  // Initialize worker lazily
-  const getWorker = () => {
+  // Initialize worker lazily (stable)
+  const getWorker = useCallback(() => {
     if (workerRef.current) return workerRef.current
     try {
       // Use public folder worker to avoid bundler/test complications
@@ -99,10 +93,38 @@ function Grid() {
     } catch (_e) {
       return null
     }
-  }
+  }, [handleWorkerMessage])
+
+  // Draw current grid state to canvas
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    const prev = gridRef.current
+    const rows = prev.length
+    const cols = prev[0].length
+    const pitchX = CELL_SIZE + CELL_GAP
+    const pitchY = CELL_SIZE + CELL_GAP
+    const width = cols * CELL_SIZE + (cols - 1) * CELL_GAP
+    const height = rows * CELL_SIZE + (rows - 1) * CELL_GAP
+    // ensure canvas size
+    if (canvas.width !== width) canvas.width = width
+    if (canvas.height !== height) canvas.height = height
+    // background as gridline color (#eee)
+    ctx.fillStyle = '#eee'
+    ctx.fillRect(0, 0, width, height)
+    // draw cells (inactive white, active black)
+    for (let r = 0; r < rows; r++) {
+      const row = prev[r]
+      for (let c = 0; c < cols; c++) {
+        ctx.fillStyle = row[c] ? '#000' : '#fff'
+        ctx.fillRect(c * pitchX, r * pitchY, CELL_SIZE, CELL_SIZE)
+      }
+    }
+  }, [])
 
   // One simulation step, either via worker or synchronously
-  function step() {
+  const step = useCallback(() => {
     if (inFlightRef.current) return
     const worker = getWorker()
     if (worker) {
@@ -123,33 +145,44 @@ function Grid() {
     }
     setGrid(next)
     setgeneration(g => g + 1)
-    if (runningRef.current) scheduleNext()
-  }
+  }, [getWorker])
+
+  // Animation loop driven by requestAnimationFrame
+  const animate = useCallback((ts) => {
+    if (!runningRef.current) return
+    if (!lastTimeRef.current) lastTimeRef.current = ts
+    const dt = ts - lastTimeRef.current
+    lastTimeRef.current = ts
+    accRef.current += dt
+    if (accRef.current >= SIMULATION_INTERVAL) {
+      // step once per interval to avoid piling up
+      step()
+      accRef.current -= SIMULATION_INTERVAL
+    }
+    draw()
+    rafRef.current = requestAnimationFrame(animate)
+  }, [draw, step])
 
   // Start/stop loop when running changes
   useEffect(() => {
     if (running) {
-      // ensure worker has handler if available
       const w = getWorker()
       if (w) w.onmessage = handleWorkerMessage
-      // kick off immediately
-      step()
+      lastTimeRef.current = 0
+      accRef.current = 0
+      rafRef.current = requestAnimationFrame(animate)
     } else {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-        timerRef.current = null
-      }
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running])
+  }, [running, animate])
 
   // Cleanup worker on unmount
   useEffect(() => {
     return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-        timerRef.current = null
-      }
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
       if (workerRef.current) {
         workerRef.current.terminate()
         workerRef.current = null
@@ -157,19 +190,36 @@ function Grid() {
     }
   }, [])
 
-  const squares = useMemo(() => (
+  // Accessible hidden grid for tests and keyboard/screen reader users
+  const a11yGrid = useMemo(() => (
     grid.map((row, rowIndex) =>
       row.map((active, colIndex) => (
-        <Square
+        <div
           key={`${rowIndex}-${colIndex}`}
-          row={rowIndex}
-          col={colIndex}
-          active={active}
-          setActive={toggleCellState}
+          role="gridcell"
+          aria-selected={active}
+          className={active ? 'active' : ''}
+          onClick={() => toggleCellState({ row: rowIndex, col: colIndex })}
+          style={{ position: 'absolute', left: '-99999px', width: 1, height: 1, overflow: 'hidden' }}
+          data-testid={`cell-${rowIndex}-${colIndex}`}
         />
       ))
     )
   ), [grid, toggleCellState])
+
+  // Toggle by clicking on canvas (for actual UI use)
+  const onCanvasClick = useCallback((e) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const col = Math.floor(x / CELL_SIZE)
+    const row = Math.floor(y / CELL_SIZE)
+    if (row >= 0 && row < gridRef.current.length && col >= 0 && col < gridRef.current[0].length) {
+      toggleCellState({ row, col })
+    }
+  }, [toggleCellState])
 
   return (
     <>
@@ -177,7 +227,8 @@ function Grid() {
       <span>Generation: {generation}</span>
       <button onClick={randomize}>Random</button>
       <div className="grid" role="grid">
-        {squares}
+        <canvas ref={canvasRef} onClick={onCanvasClick} />
+        {a11yGrid}
       </div>
     </>
   )
