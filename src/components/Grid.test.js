@@ -29,6 +29,10 @@ test('randomizes the grid', () => {
   const randomizeButton = screen.getByText(/random/i);
   fireEvent.click(randomizeButton);
   // Hard to test the exact state, but we can check if there are active cells
-  const activeSquares = screen.getAllByRole('cell').filter(el => el.classList.contains('active'));
+  const { container } = render(<Grid />);
+  const randomizeButton = screen.getByText(/random/i);
+  fireEvent.click(randomizeButton);
+  // Hard to test the exact state, but we can check if there are active cells
+  const activeSquares = Array.from(container.getElementsByClassName('square')).filter(el => el.classList.contains('active'));
   expect(activeSquares.length).toBeGreaterThan(0);
 });
