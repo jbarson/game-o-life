@@ -1,8 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react"
 
 const SIMULATION_INTERVAL = 100 // milliseconds between generations
-const CELL_SIZE = 10 // canvas pixels per cell (match CSS .square)
-const CELL_GAP = 1 // pixels between cells (match CSS .grid gap)
 const NEIGHBOR_OFFSETS = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]
 
 const findNeighbours = (grid, row, col) => {
@@ -35,6 +33,9 @@ function Grid() {
   const [running, setRunning] = useState(false)
   const [grid, setGrid] = useState(initialGrid)
   const [generation, setgeneration] = useState(0)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [cellSize, setCellSize] = useState(10)
+  const [cellGap, setCellGap] = useState(1)
 
   const toggleCellState = useCallback((cell) => {
     setGrid(prev => {
@@ -68,6 +69,57 @@ function Grid() {
   const rafRef = useRef(null)
   const lastTimeRef = useRef(0)
   const accRef = useRef(0)
+  const iterStartRef = useRef(0)
+  const timesRef = useRef([])
+  const framesInBatchRef = useRef(0)
+  const [perfStats, setPerfStats] = useState(null)
+  const fpsEwmaRef = useRef(0)
+  const computeEwmaRef = useRef(0)
+  const lastFpsUiRef = useRef(0)
+  const [liveStats, setLiveStats] = useState({ fps: null, computeEwma: null })
+
+  // Sync CSS variables for sizes and grid dims
+  useEffect(() => {
+    const root = document.documentElement
+    // read sizes
+    const csRaw = getComputedStyle(root).getPropertyValue('--cell-size').trim()
+    const cgRaw = getComputedStyle(root).getPropertyValue('--cell-gap').trim()
+    const cs = parseFloat(csRaw || '10') || 10
+    const cg = parseFloat(cgRaw || '1') || 1
+    setCellSize(cs)
+    setCellGap(cg)
+    // set grid dims for CSS grid (if used)
+    root.style.setProperty('--grid-rows', String(squareGrid.rows))
+    root.style.setProperty('--grid-cols', String(squareGrid.cols))
+  }, [squareGrid.rows, squareGrid.cols])
+
+  // Manage drawer-open class for non-occluding toggle position
+  useEffect(() => {
+    const root = document.documentElement
+    if (drawerOpen) root.classList.add('drawer-open')
+    else root.classList.remove('drawer-open')
+  }, [drawerOpen])
+
+  // Record iteration duration and update stats every 100 frames
+  const recordDuration = useCallback((ms) => {
+    // Update compute-time EWMA (alpha=0.1)
+    const alpha = 0.1
+    const prev = computeEwmaRef.current || ms
+    computeEwmaRef.current = prev + alpha * (ms - prev)
+    setLiveStats(s => ({ ...s, computeEwma: computeEwmaRef.current }))
+    timesRef.current.push(ms)
+    framesInBatchRef.current += 1
+    if (framesInBatchRef.current >= 100) {
+      const arr = timesRef.current.slice().sort((a, b) => a - b)
+      const min = arr[0]
+      const max = arr[arr.length - 1]
+      const mid = Math.floor(arr.length / 2)
+      const median = arr.length % 2 === 0 ? (arr[mid - 1] + arr[mid]) / 2 : arr[mid]
+      setPerfStats({ min, median, max })
+      timesRef.current = []
+      framesInBatchRef.current = 0
+    }
+  }, [])
 
   // Keep refs in sync with state
   useEffect(() => { gridRef.current = grid }, [grid])
@@ -75,10 +127,14 @@ function Grid() {
 
   // Worker message handler (stable)
   const handleWorkerMessage = useCallback((e) => {
+    // measure worker compute time
+    const t1 = performance.now()
+    const ms = iterStartRef.current ? (t1 - iterStartRef.current) : 0
+    if (ms > 0) recordDuration(ms)
     setGrid(e.data)
     setgeneration(g => g + 1)
     inFlightRef.current = false
-  }, [])
+  }, [recordDuration])
 
   // Initialize worker lazily (stable)
   const getWorker = useCallback(() => {
@@ -95,6 +151,7 @@ function Grid() {
     }
   }, [handleWorkerMessage])
 
+
   // Draw current grid state to canvas
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -103,10 +160,10 @@ function Grid() {
     const prev = gridRef.current
     const rows = prev.length
     const cols = prev[0].length
-    const pitchX = CELL_SIZE + CELL_GAP
-    const pitchY = CELL_SIZE + CELL_GAP
-    const width = cols * CELL_SIZE + (cols - 1) * CELL_GAP
-    const height = rows * CELL_SIZE + (rows - 1) * CELL_GAP
+    const pitchX = cellSize + cellGap
+    const pitchY = cellSize + cellGap
+    const width = cols * cellSize + (cols - 1) * cellGap
+    const height = rows * cellSize + (rows - 1) * cellGap
     // ensure canvas size
     if (canvas.width !== width) canvas.width = width
     if (canvas.height !== height) canvas.height = height
@@ -118,10 +175,10 @@ function Grid() {
       const row = prev[r]
       for (let c = 0; c < cols; c++) {
         ctx.fillStyle = row[c] ? '#000' : '#fff'
-        ctx.fillRect(c * pitchX, r * pitchY, CELL_SIZE, CELL_SIZE)
+        ctx.fillRect(c * pitchX, r * pitchY, cellSize, cellSize)
       }
     }
-  }, [])
+  }, [cellSize, cellGap])
 
   // One simulation step, either via worker or synchronously
   const step = useCallback(() => {
@@ -129,10 +186,12 @@ function Grid() {
     const worker = getWorker()
     if (worker) {
       inFlightRef.current = true
+      iterStartRef.current = performance.now()
       worker.postMessage(gridRef.current)
       return
     }
     // Fallback synchronous compute
+    const t0 = performance.now()
     const prev = gridRef.current
     const rows = prev.length
     const cols = prev[0].length
@@ -143,9 +202,11 @@ function Grid() {
         next[r][c] = prev[r][c] ? (n === 2 || n === 3) : (n === 3)
       }
     }
+    const t1 = performance.now()
+    recordDuration(t1 - t0)
     setGrid(next)
     setgeneration(g => g + 1)
-  }, [getWorker])
+  }, [getWorker, recordDuration])
 
   // Animation loop driven by requestAnimationFrame
   const animate = useCallback((ts) => {
@@ -153,6 +214,18 @@ function Grid() {
     if (!lastTimeRef.current) lastTimeRef.current = ts
     const dt = ts - lastTimeRef.current
     lastTimeRef.current = ts
+    // FPS EWMA update (alpha=0.1), throttle UI to ~4Hz
+    if (dt > 0) {
+      const fps = 1000 / dt
+      const alpha = 0.1
+      const prev = fpsEwmaRef.current || fps
+      fpsEwmaRef.current = prev + alpha * (fps - prev)
+      if (!lastFpsUiRef.current) lastFpsUiRef.current = ts
+      if (ts - lastFpsUiRef.current > 250) {
+        setLiveStats(s => ({ ...s, fps: fpsEwmaRef.current }))
+        lastFpsUiRef.current = ts
+      }
+    }
     accRef.current += dt
     if (accRef.current >= SIMULATION_INTERVAL) {
       // step once per interval to avoid piling up
@@ -202,24 +275,59 @@ function Grid() {
     const rect = canvas.getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
-  const pitchX = CELL_SIZE + CELL_GAP
-  const pitchY = CELL_SIZE + CELL_GAP
-  const col = Math.floor(x / pitchX)
-  const row = Math.floor(y / pitchY)
-  // ignore clicks in the gap between cells
-  const inCellX = (x % pitchX) < CELL_SIZE
-  const inCellY = (y % pitchY) < CELL_SIZE
-  if (!inCellX || !inCellY) return
+    const pitchX = cellSize + cellGap
+    const pitchY = cellSize + cellGap
+    const col = Math.floor(x / pitchX)
+    const row = Math.floor(y / pitchY)
+    // ignore clicks in the gap between cells
+    const inCellX = (x % pitchX) < cellSize
+    const inCellY = (y % pitchY) < cellSize
+    if (!inCellX || !inCellY) return
     if (row >= 0 && row < gridRef.current.length && col >= 0 && col < gridRef.current[0].length) {
       toggleCellState({ row, col })
     }
-  }, [toggleCellState])
+  }, [toggleCellState, cellSize, cellGap])
 
   return (
     <>
-      <button onClick={toggleGame}>{running ? "Pause" : "Start"}</button>
-      <span>Generation: {generation}</span>
-      <button onClick={randomize}>Random</button>
+      <button
+        className="drawer-toggle"
+        onClick={() => setDrawerOpen(o => !o)}
+        aria-expanded={drawerOpen}
+        aria-controls="stats-drawer"
+        title="Toggle performance stats"
+      >
+        {drawerOpen ? 'Stats' : 'Stats'}
+      </button>
+      <div className="controls">
+        <button onClick={toggleGame}>{running ? 'Pause' : 'Start'}</button>
+        <button onClick={randomize}>Random</button>
+        <span style={{ fontSize: 12 }}>Gen: {generation}</span>
+      </div>
+      <aside
+        id="stats-drawer"
+        aria-label="Performance Stats"
+        className={`drawer ${drawerOpen ? 'open' : ''}`}
+      >
+        <h3>Performance</h3>
+        <div className="drawer-content">
+          <div>Generation: {generation}</div>
+          <div>Running: {running ? 'Yes' : 'No'}</div>
+          {liveStats.fps != null && (
+            <div>FPS: {liveStats.fps.toFixed(1)}</div>
+          )}
+          {liveStats.computeEwma != null && (
+            <div>EWMA: {liveStats.computeEwma.toFixed(2)}ms</div>
+          )}
+          {perfStats && (
+            <>
+              <div>Min: {perfStats.min.toFixed(2)}ms</div>
+              <div>Median: {perfStats.median.toFixed(2)}ms</div>
+              <div>Max: {perfStats.max.toFixed(2)}ms</div>
+            </>
+          )}
+        </div>
+      </aside>
       <div className="grid" role="grid">
         <canvas ref={canvasRef} onClick={onCanvasClick} data-testid="grid-canvas" />
       </div>

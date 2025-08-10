@@ -1,3 +1,11 @@
+:root {
+  --cell-size: 10px;
+  --cell-gap: 1px;
+  --grid-cols: 50;
+  --grid-rows: 50;
+  --drawer-width: 200px;
+}
+
 .App {
   text-align: center;
   padding: 20px;
@@ -5,9 +13,9 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(50, 10px);
-  grid-template-rows: repeat(50, 10px);
-  gap: 1px;
+  grid-template-columns: repeat(var(--grid-cols, 50), var(--cell-size, 10px));
+  grid-template-rows: repeat(var(--grid-rows, 50), var(--cell-size, 10px));
+  gap: var(--cell-gap, 1px);
   margin: 20px auto;
   width: fit-content;
   border: 1px solid #ccc;
@@ -26,9 +34,9 @@
 }
 
 button {
-  margin: 0 10px;
-  padding: 10px 20px;
-  font-size: 16px;
+  margin: 0 6px;
+  padding: 6px 12px;
+  font-size: 14px;
   cursor: pointer;
   background-color: #007bff;
   color: white;
@@ -43,4 +51,57 @@ button:hover {
 button:disabled {
   background-color: #6c757d;
   cursor: not-allowed;
+}
+
+/* Drawer */
+.drawer-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: var(--drawer-width);
+  background: #fff;
+  border-left: 1px solid #ccc;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+  transform: translateX(100%);
+  transition: transform 0.2s ease-in-out;
+  padding: 16px;
+  z-index: 999;
+}
+
+.drawer.open {
+  transform: translateX(0);
+}
+
+.drawer h3 {
+  margin-top: 0;
+  font-size: 14px;
+}
+
+.drawer-content {
+  font-family: monospace;
+  line-height: 1.6;
+  font-size: 12px;
+}
+
+/* Move toggle left when drawer open to avoid occlusion */
+.drawer-open .drawer-toggle {
+  right: calc(var(--drawer-width) + 20px);
+}
+
+/* Controls row */
+.controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.controls span {
+  font-size: 12px;
 }
