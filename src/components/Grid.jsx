@@ -208,7 +208,11 @@ function Grid() {
   const row = Math.floor(y / pitchY)
   // ignore clicks in the gap between cells
   const inCellX = (x % pitchX) < CELL_SIZE
-  const inCellY = (y % pitchY) < CELL_SIZE
+  const col = Math.floor(x / PITCH_X)
+  const row = Math.floor(y / PITCH_Y)
+  // ignore clicks in the gap between cells
+  const inCellX = (x % PITCH_X) < CELL_SIZE
+  const inCellY = (y % PITCH_Y) < CELL_SIZE
   if (!inCellX || !inCellY) return
     if (row >= 0 && row < gridRef.current.length && col >= 0 && col < gridRef.current[0].length) {
       toggleCellState({ row, col })
