@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 
 const SIMULATION_INTERVAL = 100 // milliseconds between generations
 const CELL_SIZE = 10 // canvas pixels per cell (match CSS .square)
@@ -190,22 +190,10 @@ function Grid() {
     }
   }, [])
 
-  // Accessible hidden grid for tests and keyboard/screen reader users
-  const a11yGrid = useMemo(() => (
-    grid.map((row, rowIndex) =>
-      row.map((active, colIndex) => (
-        <div
-          key={`${rowIndex}-${colIndex}`}
-          role="gridcell"
-          aria-selected={active}
-          className={active ? 'active' : ''}
-          onClick={() => toggleCellState({ row: rowIndex, col: colIndex })}
-          style={{ position: 'absolute', left: '-99999px', width: 1, height: 1, overflow: 'hidden' }}
-          data-testid={`cell-${rowIndex}-${colIndex}`}
-        />
-      ))
-    )
-  ), [grid, toggleCellState])
+  // Redraw when grid changes (also covers paused state toggles)
+  useEffect(() => {
+    draw()
+  }, [grid, draw])
 
   // Toggle by clicking on canvas (for actual UI use)
   const onCanvasClick = useCallback((e) => {
@@ -214,8 +202,14 @@ function Grid() {
     const rect = canvas.getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
-    const col = Math.floor(x / CELL_SIZE)
-    const row = Math.floor(y / CELL_SIZE)
+  const pitchX = CELL_SIZE + CELL_GAP
+  const pitchY = CELL_SIZE + CELL_GAP
+  const col = Math.floor(x / pitchX)
+  const row = Math.floor(y / pitchY)
+  // ignore clicks in the gap between cells
+  const inCellX = (x % pitchX) < CELL_SIZE
+  const inCellY = (y % pitchY) < CELL_SIZE
+  if (!inCellX || !inCellY) return
     if (row >= 0 && row < gridRef.current.length && col >= 0 && col < gridRef.current[0].length) {
       toggleCellState({ row, col })
     }
@@ -227,8 +221,7 @@ function Grid() {
       <span>Generation: {generation}</span>
       <button onClick={randomize}>Random</button>
       <div className="grid" role="grid">
-        <canvas ref={canvasRef} onClick={onCanvasClick} />
-        {a11yGrid}
+        <canvas ref={canvasRef} onClick={onCanvasClick} data-testid="grid-canvas" />
       </div>
     </>
   )
