@@ -68,6 +68,10 @@ function Grid() {
   const rafRef = useRef(null)
   const lastTimeRef = useRef(0)
   const accRef = useRef(0)
+  const last1GridRef = useRef(null)
+  const last2GridRef = useRef(null)
+  const [showStableModal, setShowStableModal] = useState(false)
+  const [stableGen, setStableGen] = useState(0)
 
   // Keep refs in sync with state
   useEffect(() => { gridRef.current = grid }, [grid])
@@ -75,8 +79,25 @@ function Grid() {
 
   // Worker message handler (stable)
   const handleWorkerMessage = useCallback((e) => {
-    setGrid(e.data)
-    setgeneration(g => g + 1)
+    const next = e.data
+    // detect still-life (period-1) and period-2 before shifting history
+    const curr = gridRef.current
+    const isStillLife = gridsEqual(next, curr)
+    const twoAgo = last2GridRef.current
+    const isPeriod2 = !!twoAgo && gridsEqual(next, twoAgo)
+    // shift history: two-ago <= current, last1 <= next
+    last2GridRef.current = curr
+    last1GridRef.current = next
+    setGrid(next)
+    setgeneration(g => {
+      const newGen = g + 1
+      if ((isStillLife || isPeriod2) && runningRef.current) {
+        setStableGen(newGen)
+        setShowStableModal(true)
+        setRunning(false)
+      }
+      return newGen
+    })
     inFlightRef.current = false
   }, [])
 
@@ -143,8 +164,24 @@ function Grid() {
         next[r][c] = prev[r][c] ? (n === 2 || n === 3) : (n === 3)
       }
     }
+    // detect stability
+    const curr = gridRef.current
+    const isStillLife = gridsEqual(next, curr)
+    const twoAgo = last2GridRef.current
+    const isPeriod2 = !!twoAgo && gridsEqual(next, twoAgo)
+    // shift history
+    last2GridRef.current = curr
+    last1GridRef.current = next
     setGrid(next)
-    setgeneration(g => g + 1)
+    setgeneration(g => {
+      const newGen = g + 1
+      if ((isStillLife || isPeriod2) && runningRef.current) {
+        setStableGen(newGen)
+        setShowStableModal(true)
+        setRunning(false)
+      }
+      return newGen
+    })
   }, [getWorker])
 
   // Animation loop driven by requestAnimationFrame
@@ -202,25 +239,47 @@ function Grid() {
     const rect = canvas.getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
-  const pitchX = CELL_SIZE + CELL_GAP
-  const pitchY = CELL_SIZE + CELL_GAP
-  const col = Math.floor(x / pitchX)
-  const row = Math.floor(y / pitchY)
-  // ignore clicks in the gap between cells
-  const inCellX = (x % pitchX) < CELL_SIZE
-  const col = Math.floor(x / PITCH_X)
-  const row = Math.floor(y / PITCH_Y)
-  // ignore clicks in the gap between cells
-  const inCellX = (x % PITCH_X) < CELL_SIZE
-  const inCellY = (y % PITCH_Y) < CELL_SIZE
-  if (!inCellX || !inCellY) return
+    const pitchX = CELL_SIZE + CELL_GAP
+    const pitchY = CELL_SIZE + CELL_GAP
+    const col = Math.floor(x / pitchX)
+    const row = Math.floor(y / pitchY)
+    // ignore clicks in the gap between cells
+    const inCellX = (x % pitchX) < CELL_SIZE
+    const inCellY = (y % pitchY) < CELL_SIZE
+    if (!inCellX || !inCellY) return
     if (row >= 0 && row < gridRef.current.length && col >= 0 && col < gridRef.current[0].length) {
       toggleCellState({ row, col })
     }
   }, [toggleCellState])
 
+  // helper: deep equality for 2D boolean arrays
+  function gridsEqual(a, b) {
+    if (!a || !b) return false
+    if (a.length !== b.length) return false
+    if (a.length === 0) return true
+    if (a[0].length !== b[0].length) return false
+    for (let r = 0; r < a.length; r++) {
+      const ra = a[r]
+      const rb = b[r]
+      for (let c = 0; c < ra.length; c++) {
+        if (ra[c] !== rb[c]) return false
+      }
+    }
+    return true
+  }
+
   return (
     <>
+      {showStableModal && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="stable-title">
+          <div className="modal">
+            <h4 id="stable-title">Grid stable after {stableGen} generations</h4>
+            <div style={{ marginTop: 12, textAlign: 'right' }}>
+              <button onClick={() => setShowStableModal(false)}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
       <button onClick={toggleGame}>{running ? "Pause" : "Start"}</button>
       <span>Generation: {generation}</span>
       <button onClick={randomize}>Random</button>
