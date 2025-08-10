@@ -135,19 +135,19 @@ function Grid() {
     const t1 = performance.now()
     const ms = iterStartRef.current ? (t1 - iterStartRef.current) : 0
     if (ms > 0) recordDuration(ms)
-  const next = e.data
-  // detect still-life (period-1) and period-2 using two-ago BEFORE shifting
-  const curr = gridRef.current
-  const isStillLife = gridsEqual(next, curr)
-  const twoAgo = last2GridRef.current
-  const isPeriod2 = !!twoAgo && gridsEqual(next, twoAgo)
+    const next = e.data
+    // detect still-life (period-1) and period-2 using two-ago BEFORE shifting
+    const curr = gridRef.current
+    const isStillLife = gridsEqual(next, curr)
+    const twoAgo = last2GridRef.current
+    const isPeriod2 = !!twoAgo && gridsEqual(next, twoAgo)
     // shift history: set two-ago to current before commit
     last2GridRef.current = gridRef.current
     last1GridRef.current = next
     setGrid(next)
     setgeneration(g => {
       const newGen = g + 1
-  if ((isStillLife || isPeriod2) && runningRef.current) {
+      if ((isStillLife || isPeriod2) && runningRef.current) {
         setStableGen(newGen)
         setShowStableModal(true)
         setRunning(false)
@@ -225,17 +225,17 @@ function Grid() {
     }
     const t1 = performance.now()
     recordDuration(t1 - t0)
-  const curr = gridRef.current
-  const isStillLife = gridsEqual(next, curr)
-  const twoAgo = last2GridRef.current
-  const isPeriod2 = !!twoAgo && gridsEqual(next, twoAgo)
+    const curr = gridRef.current
+    const isStillLife = gridsEqual(next, curr)
+    const twoAgo = last2GridRef.current
+    const isPeriod2 = !!twoAgo && gridsEqual(next, twoAgo)
     // shift history: set two-ago to current before commit
     last2GridRef.current = gridRef.current
     last1GridRef.current = next
     setGrid(next)
     setgeneration(g => {
       const newGen = g + 1
-  if ((isStillLife || isPeriod2) && runningRef.current) {
+      if ((isStillLife || isPeriod2) && runningRef.current) {
         setStableGen(newGen)
         setShowStableModal(true)
         setRunning(false)

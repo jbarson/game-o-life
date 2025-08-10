@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import Grid from './Grid'
 
 function createMockCtx() {
@@ -63,4 +63,91 @@ test('randomizes the grid draws some active cells', () => {
   fireEvent.click(randomizeButton)
   const hasBlack = ctx.calls.some(c => c.type === 'fillRect' && c.fillStyle === '#000')
   expect(hasBlack).toBe(true)
+})
+
+// Helpers for stability tests
+function clickCell(canvas, row, col, cellSize = 10, cellGap = 1) {
+  const x = col * (cellSize + cellGap) + 1
+  const y = row * (cellSize + cellGap) + 1
+  fireEvent.click(canvas, { clientX: x, clientY: y })
+}
+
+test('pauses and shows modal on still-life (block) detection', async () => {
+  // Force fallback (no worker) to keep deterministic
+  // eslint-disable-next-line no-global-assign
+  global.Worker = undefined
+
+  render(<Grid />)
+  const canvas = screen.getByTestId('grid-canvas')
+
+  // Create a 2x2 block at (0,0)-(1,1) which is a still-life
+  clickCell(canvas, 0, 0)
+  clickCell(canvas, 0, 1)
+  clickCell(canvas, 1, 0)
+  clickCell(canvas, 1, 1)
+
+  // Mock rAF to manually advance time and drive one step
+  let rafCb = null
+  jest.spyOn(window, 'requestAnimationFrame').mockImplementation(cb => {
+    rafCb = cb
+    return 1
+  })
+
+  const startBtn = screen.getByText(/start/i)
+  fireEvent.click(startBtn)
+
+  // Initialize animate then exceed SIMULATION_INTERVAL (100ms) to trigger one step
+  expect(typeof rafCb).toBe('function')
+  await act(async () => {
+    rafCb(1)
+  })
+  await act(async () => {
+    rafCb(200)
+  })
+
+  // Should pause and show modal
+  expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  expect(await screen.findByText(/Grid stable after 1 generations/i)).toBeInTheDocument()
+  // Start button should be back to Start (paused)
+  expect(screen.getByText(/start/i)).toBeInTheDocument()
+})
+
+test('pauses and shows modal on period-2 (blinker) detection', async () => {
+  // Force fallback (no worker)
+  // eslint-disable-next-line no-global-assign
+  global.Worker = undefined
+
+  render(<Grid />)
+  const canvas = screen.getByTestId('grid-canvas')
+
+  // Blinker: horizontal line of 3 alive cells somewhere away from edges
+  const r = 3
+  clickCell(canvas, r, 3)
+  clickCell(canvas, r, 4)
+  clickCell(canvas, r, 5)
+
+  // Mock rAF
+  let rafCb = null
+  jest.spyOn(window, 'requestAnimationFrame').mockImplementation(cb => {
+    rafCb = cb
+    return 1
+  })
+
+  const startBtn = screen.getByText(/start/i)
+  fireEvent.click(startBtn)
+
+  // Two steps required for period-2
+  await act(async () => {
+    rafCb(1)       // init
+  })
+  await act(async () => {
+    rafCb(200)     // step 1
+  })
+  await act(async () => {
+    rafCb(400)     // step 2 -> should detect period-2 and pause
+  })
+
+  expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  expect(await screen.findByText(/Grid stable after 2 generations/i)).toBeInTheDocument()
+  expect(screen.getByText(/start/i)).toBeInTheDocument()
 })
