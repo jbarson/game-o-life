@@ -69,6 +69,8 @@ function Grid() {
   const rafRef = useRef(null)
   const lastTimeRef = useRef(0)
   const accRef = useRef(0)
+  const last1GridRef = useRef(null)
+  const last2GridRef = useRef(null)
   const iterStartRef = useRef(0)
   const timesRef = useRef([])
   const framesInBatchRef = useRef(0)
@@ -77,6 +79,8 @@ function Grid() {
   const computeEwmaRef = useRef(0)
   const lastFpsUiRef = useRef(0)
   const [liveStats, setLiveStats] = useState({ fps: null, computeEwma: null })
+  const [showStableModal, setShowStableModal] = useState(false)
+  const [stableGen, setStableGen] = useState(0)
 
   // Sync CSS variables for sizes and grid dims
   useEffect(() => {
@@ -131,8 +135,23 @@ function Grid() {
     const t1 = performance.now()
     const ms = iterStartRef.current ? (t1 - iterStartRef.current) : 0
     if (ms > 0) recordDuration(ms)
-    setGrid(e.data)
-    setgeneration(g => g + 1)
+    const next = e.data
+    // detect period-2 cycle using two-ago BEFORE shifting
+    const twoAgo = last2GridRef.current
+    const isPeriod2 = !!twoAgo && gridsEqual(next, twoAgo)
+    // shift history: set two-ago to current before commit
+    last2GridRef.current = gridRef.current
+    last1GridRef.current = next
+    setGrid(next)
+    setgeneration(g => {
+      const newGen = g + 1
+      if (isPeriod2 && runningRef.current) {
+        setStableGen(newGen)
+        setShowStableModal(true)
+        setRunning(false)
+      }
+      return newGen
+    })
     inFlightRef.current = false
   }, [recordDuration])
 
@@ -204,8 +223,21 @@ function Grid() {
     }
     const t1 = performance.now()
     recordDuration(t1 - t0)
+    const twoAgo = last2GridRef.current
+    const isPeriod2 = !!twoAgo && gridsEqual(next, twoAgo)
+    // shift history: set two-ago to current before commit
+    last2GridRef.current = gridRef.current
+    last1GridRef.current = next
     setGrid(next)
-    setgeneration(g => g + 1)
+    setgeneration(g => {
+      const newGen = g + 1
+      if (isPeriod2 && runningRef.current) {
+        setStableGen(newGen)
+        setShowStableModal(true)
+        setRunning(false)
+      }
+      return newGen
+    })
   }, [getWorker, recordDuration])
 
   // Animation loop driven by requestAnimationFrame
@@ -288,8 +320,34 @@ function Grid() {
     }
   }, [toggleCellState, cellSize, cellGap])
 
+  // helper: deep equality for 2D boolean arrays
+  function gridsEqual(a, b) {
+    if (!a || !b) return false
+    if (a.length !== b.length) return false
+    if (a.length === 0) return true
+    if (a[0].length !== b[0].length) return false
+    for (let r = 0; r < a.length; r++) {
+      const ra = a[r]
+      const rb = b[r]
+      for (let c = 0; c < ra.length; c++) {
+        if (ra[c] !== rb[c]) return false
+      }
+    }
+    return true
+  }
+
   return (
     <>
+      {showStableModal && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="stable-title">
+          <div className="modal">
+            <h4 id="stable-title">Grid stable after {stableGen} generations</h4>
+            <div style={{ marginTop: 12, textAlign: 'right' }}>
+              <button onClick={() => setShowStableModal(false)}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
       <button
         className="drawer-toggle"
         onClick={() => setDrawerOpen(o => !o)}
